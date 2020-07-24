@@ -53,14 +53,14 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		os.RemoveAll(reportDir)
 		os.RemoveAll(reposDir)
 	}()
-
 	if err := file.CreateDir(reportDir); err != nil {
 		return []string{}, [][]string{}, errors.WithStack(err)
 	}
 
 	ctx := context.Background()
+	// TODO: make env vars
 	opts := &github.RepositoryListByOrgOptions{
-		ListOptions: github.ListOptions{PerPage: 2},
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
 	// list all repositories for the authenticated user
@@ -72,7 +72,9 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		defer res.Body.Close()
 
 		for _, r := range repos {
-			// hack to make tests work
+			// first conditional is a hack to make tests work
+			// the second is because for now we assume we don't care about
+			// archived repos
 			if r.Archived != nil && *r.Archived {
 				continue
 			}
@@ -92,12 +94,12 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 
 			name := *r.Name
 			dest := fmt.Sprintf("%s/%s.json", reportDir, name)
+			log.Println("preparing to analyze", name)
 			_, err = RunSCC(path, dest)
 			if err != nil {
 				return []string{}, [][]string{}, errors.WithStack(err)
 			}
 		}
-
 		if res.NextPage == 0 {
 			break
 		}
@@ -106,14 +108,17 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 	languageSet := set.NewStringSet()
 	header := GetDefaultHeaders()
 	var rows [][]string
-	file.IterateDirectory(reportDir, func(reportFileName string) error {
+
+	log.Println("report dir", reportDir)
+
+	err := file.IterateDirectory(reportDir, func(reportFileName string) error {
 		// iterate over files create a slice of strings
 		reportPath := filepath.Join(reportDir, reportFileName)
 		b, err := file.GetFileBytes(reportPath)
 		if err != nil {
 			return errors.WithStack(err)
 		}
-
+		log.Println("preparing", reportPath)
 		// get language summary
 		var summaries []processor.LanguageSummary
 		if err := json.Unmarshal(b, &summaries); err != nil {
@@ -128,6 +133,10 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 
 		return nil
 	})
+	if err != nil {
+		log.Println(err.Error())
+		return []string{}, [][]string{}, errors.WithStack(err)
+	}
 
 	foundLanguages := languageSet.List()
 	header = append(header, foundLanguages...)
