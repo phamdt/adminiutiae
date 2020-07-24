@@ -9,19 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/phamdt/adminiutiae/service"
 	"github.com/steinfletcher/apitest"
-
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/jmoiron/sqlx"
 )
 
 func TestCodeCountController_Create(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection: %s", err, mock)
-	}
-	defer db.Close()
-	sqlxDB := sqlx.NewDb(db, "sqlmock")
-
 	tests := []struct {
 		name           string
 		authorization  string
@@ -45,7 +35,7 @@ func TestCodeCountController_Create(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			router := gin.Default()
 			counter := MockCounter{}
-			codeCountCtrl := CodeCountController{db: sqlxDB, counter: &counter}
+			codeCountCtrl := CodeCountController{counter: &counter}
 			router.POST("/github/:org/code/counts", codeCountCtrl.Create)
 
 			apitest.New().
