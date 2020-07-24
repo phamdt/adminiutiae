@@ -9,7 +9,7 @@ import (
 )
 
 func CreateDir(dir string) error {
-	if DirExists(dir) {
+	if !DirExists(dir) {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			return fmt.Errorf(dir, err)
 		}
