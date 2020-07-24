@@ -27,7 +27,8 @@ func (ctrl *CodeCountController) Create(c *gin.Context) {
 	baseGitURL := os.Getenv("BASE_GIT_URL")
 
 	// TODO: move auth to middleware
-	user, token, err := GetBasicCredentials(c)
+	h := c.GetHeader("Authorization")
+	user, token, err := GetBasicCredentials(h)
 	if err != nil {
 		log.Printf("Error creating code count report: %+v", err)
 		c.AbortWithStatus(http.StatusUnauthorized)
@@ -60,13 +61,12 @@ func (ctrl *CodeCountController) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{})
 }
 
-func GetBasicCredentials(c *gin.Context) (string, string, error) {
-	h := c.GetHeader("Authorization")
-	if h == "" {
+func GetBasicCredentials(header string) (string, string, error) {
+	if header == "" {
 		return "", "", errors.New("missing authorization")
 	}
 
-	authParts := strings.Split(h, "Basic ")
+	authParts := strings.Split(header, "Basic ")
 	if len(authParts) < 1 {
 		return "", "", errors.New("missing basic authorization")
 	}

@@ -7,10 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCodeCountController_Create(t *testing.T) {
@@ -34,16 +33,10 @@ func TestCodeCountController_Create(t *testing.T) {
 			wantStatusCode: http.StatusUnauthorized,
 		},
 		{
-			name:           "Test creating with valid Code as body",
-			authorization:  fmt.Sprintf("Basic: %s", yaaBasic("user:api_key")),
+			name:           "Test creating csv code count report happy path",
+			authorization:  yaaBasic("user:api_key"),
 			path:           "/github/SD/code/counts",
 			wantStatusCode: http.StatusOK,
-		},
-		{
-			name:           "Test creating with empty request body",
-			authorization:  fmt.Sprintf("Basic: %s", yaaBasic("user:api_key")),
-			path:           "/github/SD/code/counts",
-			wantStatusCode: http.StatusBadRequest,
 		},
 	}
 	for _, tt := range tests {
@@ -52,6 +45,7 @@ func TestCodeCountController_Create(t *testing.T) {
 
 			w := httptest.NewRecorder()
 			req, _ := http.NewRequest("POST", tt.path, nil)
+			req.Header["Authorization"] = []string{tt.authorization}
 			router.ServeHTTP(w, req)
 
 			assert.Equal(t, tt.wantStatusCode, w.Code, w.Body)
@@ -60,5 +54,44 @@ func TestCodeCountController_Create(t *testing.T) {
 }
 
 func yaaBasic(credentials string) string {
-	return base64.StdEncoding.EncodeToString([]byte(credentials))
+	encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
+	return fmt.Sprintf("Basic %s", encoded)
+}
+
+func TestGetBasicCredentials(t *testing.T) {
+	type args struct {
+		header string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		user    string
+		token   string
+		wantErr bool
+	}{
+		{
+			name: "test decoding well formed authorization header",
+			args: args{
+				header: yaaBasic("user:api_key"),
+			},
+			user:    "user",
+			token:   "api_key",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, got1, err := GetBasicCredentials(tt.args.header)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetBasicCredentials() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.user {
+				t.Errorf("GetBasicCredentials() got = %v, want %v", got, tt.user)
+			}
+			if got1 != tt.token {
+				t.Errorf("GetBasicCredentials() got1 = %v, want %v", got1, tt.token)
+			}
+		})
+	}
 }
