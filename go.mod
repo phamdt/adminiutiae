@@ -1,6 +1,6 @@
 module github.com/phamdt/adminiutiae
 
-go 1.13
+go 1.14
 
 require (
 	github.com/boyter/scc v2.12.0+incompatible

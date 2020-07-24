@@ -1,8 +1,10 @@
 ########## base target ##########
-FROM golang:1.14 AS base
+FROM golang:1.14-alpine AS base
 
 ADD . /app
 WORKDIR /app
+
+RUN go mod download
 
 CMD go run main.go
 
