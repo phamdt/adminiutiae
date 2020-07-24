@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -32,7 +31,7 @@ func NewCounter(ctx context.Context, token string, baseGitURL string) Counter {
 		&oauth2.Token{AccessToken: token},
 	)
 	tc := oauth2.NewClient(ctx, ts)
-	client, err := github.NewEnterpriseClient(baseGitURL, "", tc)
+	client, err := github.NewEnterpriseClient(fmt.Sprintf("%s/api/v3", baseGitURL), "", tc)
 	if err != nil {
 		panic(errors.WithStack(err))
 	}
@@ -44,10 +43,10 @@ func NewCounter(ctx context.Context, token string, baseGitURL string) Counter {
 	}
 }
 
-func (c *Counter) CountGithubLOC(outputBaseDir, org string) error {
+func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string, error) {
 	reportDir := fmt.Sprintf("%s/reports/%s", outputBaseDir, org)
 	if err := file.CreateDir(reportDir); err != nil {
-		return errors.WithStack(err)
+		return []string{}, [][]string{}, errors.WithStack(err)
 	}
 
 	reposDir := fmt.Sprintf("%s/repos", outputBaseDir)
@@ -60,7 +59,7 @@ func (c *Counter) CountGithubLOC(outputBaseDir, org string) error {
 	for {
 		repos, res, err := c.Client.Repositories.ListByOrg(ctx, org, opts)
 		if err != nil {
-			return errors.WithStack(err)
+			return []string{}, [][]string{}, errors.WithStack(err)
 		}
 		defer res.Body.Close()
 
@@ -78,16 +77,17 @@ func (c *Counter) CountGithubLOC(outputBaseDir, org string) error {
 
 			_, err := DownloadRepo(path, c.Token, url)
 			if err != nil {
-				return errors.WithStack(err)
+				return []string{}, [][]string{}, errors.WithStack(err)
 			}
 
 			name := *r.Name
 			dest := fmt.Sprintf("%s/%s.json", reportDir, name)
 			_, err = RunSCC(path, dest)
 			if err != nil {
-				return errors.WithStack(err)
+				return []string{}, [][]string{}, errors.WithStack(err)
 			}
 		}
+
 		if res.NextPage == 0 {
 			break
 		}
@@ -118,26 +118,14 @@ func (c *Counter) CountGithubLOC(outputBaseDir, org string) error {
 
 		return nil
 	})
-	foundLanguages := languageSet.List()
-	header = append(header, foundLanguages...)
-
-	newCsv, err := os.Create("code-count.csv")
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	defer newCsv.Close()
-
-	writer := csv.NewWriter(newCsv)
-	defer writer.Flush()
-
-	writer.Write(header)
-	writer.WriteAll(rows)
 
 	// cleanup after ourselves
 	os.RemoveAll(reportDir)
 	os.RemoveAll(reposDir)
 
-	return nil
+	foundLanguages := languageSet.List()
+	header = append(header, foundLanguages...)
+	return header, rows, nil
 }
 
 func ExtractLanguageCounts(languageSet set.StringSet, summaries []processor.LanguageSummary) []string {
