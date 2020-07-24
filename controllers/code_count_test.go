@@ -4,12 +4,14 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/phamdt/adminiutiae/service"
+	"github.com/steinfletcher/apitest"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestCodeCountController_Create(t *testing.T) {
@@ -29,33 +31,55 @@ func TestCodeCountController_Create(t *testing.T) {
 		{
 			name:           "Test missing Basic Auth",
 			authorization:  "",
-			path:           "/github/SD/code/counts",
+			path:           "/github/org/code/counts",
 			wantStatusCode: http.StatusUnauthorized,
 		},
 		{
 			name:           "Test creating csv code count report happy path",
 			authorization:  yaaBasic("user:api_key"),
-			path:           "/github/SD/code/counts",
-			wantStatusCode: http.StatusOK,
+			path:           "/github/org/code/counts",
+			wantStatusCode: http.StatusCreated,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := GetRouter(sqlxDB)
+			router := gin.Default()
+			counter := MockCounter{}
+			codeCountCtrl := CodeCountController{db: sqlxDB, counter: &counter}
+			router.POST("/github/:org/code/counts", codeCountCtrl.Create)
 
-			w := httptest.NewRecorder()
-			req, _ := http.NewRequest("POST", tt.path, nil)
-			req.Header["Authorization"] = []string{tt.authorization}
-			router.ServeHTTP(w, req)
-
-			assert.Equal(t, tt.wantStatusCode, w.Code, w.Body)
+			apitest.New().
+				Handler(router).
+				Post(tt.path).
+				Headers(map[string]string{"Authorization": tt.authorization}).
+				Expect(t).
+				Status(tt.wantStatusCode).
+				End()
 		})
 	}
+}
+
+type MockCounter struct{}
+
+func (c *MockCounter) GetGithubLOC(dir string, org string) ([]string, [][]string, error) {
+	rows := [][]string{[]string{"org", "name", "git url", "1", "", "2"}}
+	return service.GetDefaultHeaders(), rows, nil
 }
 
 func yaaBasic(credentials string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 	return fmt.Sprintf("Basic %s", encoded)
+}
+
+func getRepositoryAPIMock() *apitest.Mock {
+	return apitest.NewMock().
+		Get("/api/v3/orgs/org/repos?per_page=2").
+		RespondWith().
+		Body(`
+		[{"id": 1, "archived": false, "full_name": "github.com/org/repo1", "clone_url": "fakegithub.example.com/repo.git"}]
+		`).
+		Status(http.StatusOK).
+		End()
 }
 
 func TestGetBasicCredentials(t *testing.T) {

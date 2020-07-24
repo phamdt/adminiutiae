@@ -19,10 +19,15 @@ import (
 // CodeCountController exposes the methods for interacting with the
 // RESTful CodeCount resource
 type CodeCountController struct {
-	db *sqlx.DB
+	db      *sqlx.DB
+	counter ICounter
 }
 
-// Create saves a new CodeCount record into the database
+type ICounter interface {
+	GetGithubLOC(string, string) ([]string, [][]string, error)
+}
+
+// Create generates a code count report to be returned to the user
 func (ctrl *CodeCountController) Create(c *gin.Context) {
 	baseGitURL := os.Getenv("BASE_GIT_URL")
 
@@ -36,11 +41,16 @@ func (ctrl *CodeCountController) Create(c *gin.Context) {
 	}
 
 	user = strings.ToLower(user)
-	outputBaseDir := fmt.Sprintf("/usr/local/%s", user)
-	org := c.GetString("org")
+	outputBaseDir := fmt.Sprintf("/tmp/%s", user)
+	org := c.Param("org")
+
 	ctx := context.Background()
-	counter := service.NewCounter(ctx, token, baseGitURL)
-	header, rows, err := counter.GetGithubLOC(outputBaseDir, org)
+	if ctrl.counter == nil {
+		local := service.NewCounter(ctx, token, baseGitURL)
+		ctrl.counter = &local
+	}
+
+	header, rows, err := ctrl.counter.GetGithubLOC(outputBaseDir, org)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return

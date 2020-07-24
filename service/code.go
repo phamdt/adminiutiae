@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,11 +46,18 @@ func NewCounter(ctx context.Context, token string, baseGitURL string) Counter {
 
 func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string, error) {
 	reportDir := fmt.Sprintf("%s/reports/%s", outputBaseDir, org)
+	reposDir := fmt.Sprintf("%s/repos", outputBaseDir)
+
+	// remember to clean up after ourselves
+	defer func() {
+		os.RemoveAll(reportDir)
+		os.RemoveAll(reposDir)
+	}()
+
 	if err := file.CreateDir(reportDir); err != nil {
 		return []string{}, [][]string{}, errors.WithStack(err)
 	}
 
-	reposDir := fmt.Sprintf("%s/repos", outputBaseDir)
 	ctx := context.Background()
 	opts := &github.RepositoryListByOrgOptions{
 		ListOptions: github.ListOptions{PerPage: 2},
@@ -64,7 +72,8 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		defer res.Body.Close()
 
 		for _, r := range repos {
-			if *r.Archived {
+			// hack to make tests work
+			if r.Archived != nil && *r.Archived {
 				continue
 			}
 
@@ -77,6 +86,7 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 
 			_, err := DownloadRepo(path, c.Token, url)
 			if err != nil {
+				log.Println("err", url)
 				return []string{}, [][]string{}, errors.WithStack(err)
 			}
 
@@ -94,7 +104,7 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		opts.Page = res.NextPage
 	}
 	languageSet := set.NewStringSet()
-	header := []string{"Org", "Name", "Git Url"}
+	header := GetDefaultHeaders()
 	var rows [][]string
 	file.IterateDirectory(reportDir, func(reportFileName string) error {
 		// iterate over files create a slice of strings
@@ -119,13 +129,13 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		return nil
 	})
 
-	// cleanup after ourselves
-	os.RemoveAll(reportDir)
-	os.RemoveAll(reposDir)
-
 	foundLanguages := languageSet.List()
 	header = append(header, foundLanguages...)
 	return header, rows, nil
+}
+
+func GetDefaultHeaders() []string {
+	return []string{"Org", "Name", "Git Url"}
 }
 
 func ExtractLanguageCounts(languageSet set.StringSet, summaries []processor.LanguageSummary) []string {
