@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/csv"
@@ -11,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
 	"github.com/phamdt/adminiutiae/service"
 	"github.com/pkg/errors"
 )
@@ -19,7 +19,6 @@ import (
 // CodeCountController exposes the methods for interacting with the
 // RESTful CodeCount resource
 type CodeCountController struct {
-	db      *sqlx.DB
 	counter ICounter
 }
 
@@ -56,19 +55,17 @@ func (ctrl *CodeCountController) Create(c *gin.Context) {
 		return
 	}
 
-	newCsv, err := os.Create("code_count.csv")
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	defer newCsv.Close()
-
-	writer := csv.NewWriter(newCsv)
+	// TODO: toggle content type
+	b := &bytes.Buffer{}
+	writer := csv.NewWriter(b)
 	defer writer.Flush()
 
 	writer.Write(header)
 	writer.WriteAll(rows)
-	c.JSON(http.StatusCreated, gin.H{})
+
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Disposition", "attachment; filename=count_count.csv")
+	c.Data(http.StatusCreated, "text/csv", b.Bytes())
 }
 
 func GetBasicCredentials(header string) (string, string, error) {
