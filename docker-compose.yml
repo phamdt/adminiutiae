@@ -1,0 +1,20 @@
+version: "3.4"
+services:  
+  adminiutiae:
+    container_name: adminiutiae
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    env_file: .env
+    command: fresh -c runner.conf
+    volumes:
+      - ./:/app
+    ports:
+      - "8080:8080"
+    networks:
+      - adminiutiae
+
+networks:
+  adminiutiae:
+    driver: "bridge"
