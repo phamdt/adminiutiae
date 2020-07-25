@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -69,45 +70,57 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		}
 		defer res.Body.Close()
 
+		var repoGroup sync.WaitGroup
+		repoGroup.Add(len(repos))
+
 		for _, r := range repos {
-			// first conditional is a hack to make tests work
-			// the second is because for now we assume we don't care about
-			// archived repos
-			if r.Archived != nil && *r.Archived {
-				continue
-			}
+			go func(r *github.Repository) {
+				defer repoGroup.Done()
 
-			url := r.GetCloneURL()
-			fullName := *r.FullName
-			path := filepath.Join(reposDir, fullName)
-			if file.DirExists(path) {
-				os.RemoveAll(path)
-			}
+				// first conditional is a hack to make tests work
+				// the second is because for now we assume we don't care about
+				// archived repos
+				if r.Archived != nil && *r.Archived {
+					return
+				}
 
-			_, err := DownloadRepo(path, c.Token, url)
-			if err != nil {
-				log.Println("err", url)
-				return []string{}, [][]string{}, errors.WithStack(err)
-			}
+				url := r.GetCloneURL()
+				fullName := *r.FullName
+				path := filepath.Join(reposDir, fullName)
+				_, err := DownloadRepo(path, c.Token, url)
+				if err != nil {
+					log.Println(err.Error(), url)
+				}
+				log.Println("finished downloading", fullName)
+			}(r)
+		}
+		repoGroup.Wait()
 
-			name := *r.Name
-			dest := fmt.Sprintf("%s/%s.json", reportDir, name)
+		orgDir := filepath.Join(reposDir, org)
+		err = file.IterateDirectory(orgDir, func(name string) error {
 			log.Println("preparing to analyze", name)
+
+			dest := fmt.Sprintf("%s/%s.json", reportDir, name)
+			path := filepath.Join(orgDir, name)
 			_, err = RunSCC(path, dest)
 			if err != nil {
-				return []string{}, [][]string{}, errors.WithStack(err)
+				return errors.WithStack(err)
 			}
+			return nil
+		})
+
+		if err != nil {
+			return []string{}, [][]string{}, errors.WithStack(err)
 		}
 		if res.NextPage == 0 {
 			break
 		}
 		opts.Page = res.NextPage
 	}
+
 	languageSet := set.NewStringSet()
 	header := GetDefaultHeaders()
 	var rows [][]string
-
-	log.Println("report dir", reportDir)
 
 	err := file.IterateDirectory(reportDir, func(reportFileName string) error {
 		// iterate over files create a slice of strings
@@ -116,12 +129,14 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		if err != nil {
 			return errors.WithStack(err)
 		}
+
 		log.Println("preparing", reportPath)
 		// get language summary
 		var summaries []LanguageSummary
 		if err := json.Unmarshal(b, &summaries); err != nil {
 			return errors.WithStack(err)
 		}
+
 		name := strings.Split(reportFileName, ".")[0]
 		repoURL := filepath.Join(c.BaseGitURL, org, name)
 		row := []string{org, name, repoURL}
