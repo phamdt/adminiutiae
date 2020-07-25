@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/phamdt/adminiutiae/src/file"
+
 	"github.com/phamdt/adminiutiae/src/service"
 )
 
@@ -46,7 +48,11 @@ func main() {
 		return
 	}
 
-	newCsv, err := os.Create("code_count.csv")
+	if err := file.CreateDir("counts"); err != nil {
+		log.Fatalf("error creating directory: %+v", err)
+	}
+
+	newCsv, err := os.Create("counts/code_count.csv")
 	if err != nil {
 		panic(err)
 	}
