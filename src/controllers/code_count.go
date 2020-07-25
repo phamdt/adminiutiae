@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/phamdt/adminiutiae/service"
+	"github.com/phamdt/adminiutiae/src/service"
 	"github.com/pkg/errors"
 )
 

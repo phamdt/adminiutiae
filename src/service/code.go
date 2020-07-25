@@ -9,15 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 
-	"github.com/boyter/scc/processor"
 	"github.com/google/go-github/github"
-	"github.com/phamdt/adminiutiae/file"
-	"github.com/phamdt/adminiutiae/set"
+	"github.com/phamdt/adminiutiae/src/file"
+	"github.com/phamdt/adminiutiae/src/set"
 	"golang.org/x/oauth2"
 )
 
@@ -120,14 +118,14 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		}
 		log.Println("preparing", reportPath)
 		// get language summary
-		var summaries []processor.LanguageSummary
+		var summaries []LanguageSummary
 		if err := json.Unmarshal(b, &summaries); err != nil {
 			return errors.WithStack(err)
 		}
 		name := strings.Split(reportFileName, ".")[0]
 		repoURL := filepath.Join(c.BaseGitURL, org, name)
 		row := []string{org, name, repoURL}
-		counts := ExtractLanguageCounts(languageSet, summaries)
+		counts := ExtractLanguageCounts(&languageSet, summaries)
 		row = append(row, counts...)
 		rows = append(rows, row)
 
@@ -145,31 +143,6 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 
 func GetDefaultHeaders() []string {
 	return []string{"Org", "Name", "Git Url"}
-}
-
-func ExtractLanguageCounts(languageSet set.StringSet, summaries []processor.LanguageSummary) []string {
-	localSet := set.NewSummarySet()
-	for _, languageSummary := range summaries {
-		// update global language lookup
-		languageSet.Add(languageSummary.Name)
-		// update file specific lookup
-		localSet.Add(languageSummary)
-	}
-
-	counts := []string{}
-	for _, language := range languageSet.List() {
-		// if localset has the language
-		if localSet.Has(language) {
-			// add the count
-			s, _ := localSet.GetSummaryMeta(language)
-			count := strconv.FormatInt(s.Code, 10)
-			counts = append(counts, count)
-		} else {
-			// add empty string
-			counts = append(counts, "")
-		}
-	}
-	return counts
 }
 
 // RunSCC executes the scc binary. This means you must ensure that https://github.com/boyter/scc is in the path
