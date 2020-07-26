@@ -38,4 +38,4 @@ ENV PATH="/app:${PATH}"
 
 
 EXPOSE 8080
-ENTRYPOINT [ "./adminiutiae" ]
+CMD [ "./adminiutiae" ]

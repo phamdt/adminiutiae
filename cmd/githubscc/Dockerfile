@@ -33,4 +33,4 @@ ENV PATH="/app:${PATH}"
 
 
 EXPOSE 8080
-ENTRYPOINT [ "./githubscc" ]
+CMD [ "./githubscc" ]

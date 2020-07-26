@@ -45,7 +45,7 @@ func NewCounter(ctx context.Context, token string, baseGitURL string) Counter {
 
 func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string, error) {
 	reportDir := fmt.Sprintf("%s/reports/%s", outputBaseDir, org)
-	reposDir := fmt.Sprintf("%s/repos", outputBaseDir)
+	reposDir := fmt.Sprintf("%s/repos/%s", outputBaseDir, org)
 
 	// remember to clean up after ourselves
 	defer func() {
@@ -59,7 +59,7 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 	ctx := context.Background()
 	// TODO: make env vars
 	opts := &github.RepositoryListByOrgOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+		ListOptions: github.ListOptions{PerPage: 1},
 	}
 
 	// list all repositories for the authenticated user
@@ -96,33 +96,37 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 		}
 		repoGroup.Wait()
 
-		orgDir := filepath.Join(reposDir, org)
-		err = file.IterateDirectory(orgDir, func(name string) error {
-			log.Println("preparing to analyze", name)
-
-			dest := fmt.Sprintf("%s/%s.json", reportDir, name)
-			path := filepath.Join(orgDir, name)
-			_, err = RunSCC(path, dest)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-			return nil
-		})
-
-		if err != nil {
-			return []string{}, [][]string{}, errors.WithStack(err)
-		}
 		if res.NextPage == 0 {
 			break
 		}
 		opts.Page = res.NextPage
 	}
 
+	orgDir := filepath.Join(reposDir, org)
+	err := file.IterateDirectory(orgDir, func(name string) error {
+		log.Println("preparing to analyze", name)
+
+		dest := fmt.Sprintf("%s/%s.json", reportDir, name)
+		path := filepath.Join(orgDir, name)
+		_, err := RunSCC(path, dest)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		repoDir := filepath.Join(reposDir, name)
+		os.RemoveAll(repoDir)
+		log.Println("removed", repoDir)
+		return nil
+	})
+
+	if err != nil {
+		return []string{}, [][]string{}, errors.WithStack(err)
+	}
+
 	languageSet := set.NewStringSet()
 	header := GetDefaultHeaders()
 	var rows [][]string
 
-	err := file.IterateDirectory(reportDir, func(reportFileName string) error {
+	err = file.IterateDirectory(reportDir, func(reportFileName string) error {
 		// iterate over files create a slice of strings
 		reportPath := filepath.Join(reportDir, reportFileName)
 		b, err := file.GetFileBytes(reportPath)
@@ -130,7 +134,7 @@ func (c *Counter) GetGithubLOC(outputBaseDir, org string) ([]string, [][]string,
 			return errors.WithStack(err)
 		}
 
-		log.Println("preparing", reportPath)
+		log.Println("preparing to aggregate data from", reportPath)
 		// get language summary
 		var summaries []LanguageSummary
 		if err := json.Unmarshal(b, &summaries); err != nil {
