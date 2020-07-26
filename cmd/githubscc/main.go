@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/phamdt/adminiutiae/src/file"
 
@@ -16,6 +17,7 @@ import (
 
 func main() {
 	outputBaseDir := "/tmp"
+
 	reader := bufio.NewReader(os.Stdin)
 	delimiter := byte('\n')
 
@@ -48,11 +50,15 @@ func main() {
 		return
 	}
 
-	if err := file.CreateDir("counts"); err != nil {
+	countDir := fmt.Sprintf("counts/%s", org)
+	if err := file.CreateDir(countDir); err != nil {
 		log.Fatalf("error creating directory: %+v", err)
 	}
-
-	newCsv, err := os.Create("counts/code_count.csv")
+	t := time.Now()
+	prefix := t.Format(time.RFC3339)
+	prefix = strings.ReplaceAll(prefix, ":", "")
+	fileName := fmt.Sprintf("%s/code_count_%s.csv", countDir, prefix)
+	newCsv, err := os.Create(fileName)
 	if err != nil {
 		panic(err)
 	}
