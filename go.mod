@@ -3,7 +3,7 @@ module github.com/phamdt/adminiutiae
 go 1.14
 
 require (
-	github.com/gin-gonic/gin v1.6.3
+	github.com/gin-gonic/gin v1.7.3
 	github.com/go-git/go-git/v5 v5.1.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0 // indirect
