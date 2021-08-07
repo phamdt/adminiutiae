@@ -79,8 +79,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/sergi/go-diff v1.1.0 h1:we8PVUC3FE2uYfodKH/nBHMSetSfHDR6scGdBi+erh0=
 github.com/sergi/go-diff v1.1.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
-github.com/steinfletcher/apitest v1.4.10 h1:uQ79AiO3U1hIM829m8p7ke0NsybrBaTLzv23gsHqjzQ=
-github.com/steinfletcher/apitest v1.4.10/go.mod h1:0MT98QwexQVvf5pIn3fqiC/+8Nyd7A4RShxuSjnpOcE=
+github.com/steinfletcher/apitest v1.4.15 h1:EvhFsnMGhKi5gye91DapEAmieS3gO+gQq65BQ5FYWNs=
+github.com/steinfletcher/apitest v1.4.15/go.mod h1:0MT98QwexQVvf5pIn3fqiC/+8Nyd7A4RShxuSjnpOcE=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
