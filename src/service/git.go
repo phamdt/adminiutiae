@@ -10,6 +10,7 @@ import (
 
 // DownloadRepo uses go-git to download the git repo using the clone URL. If
 // you can figure out how to do this with go-github, we can remove the dependency
+// TODO: excessive/wrong abstraction
 func DownloadRepo(destinationPath, token, cloneURL string) (*git.Repository, error) {
 	repo, err := git.PlainClone(destinationPath, false, &git.CloneOptions{
 		Auth: &ghttp.BasicAuth{

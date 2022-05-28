@@ -3,59 +3,50 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/gin-gonic/gin"
-
-	"github.com/phamdt/adminiutiae/src/controllers"
+	app "github.com/phamdt/adminiutiae/src"
 )
 
+// main is the go required function name for any package that can be executed.
 func main() {
-	// construct dependencies
-	log.Println("initializing adminiutiae")
-
-	// setup router and middleware
-	router := controllers.GetRouter()
-
-	// Recovery middleware recovers from any panics and writes a 500 if there was one.
-	router.Use(gin.Recovery())
-
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: router,
+	c, err := app.NewConfig()
+	if err != nil {
+		log.Fatal(err)
 	}
 
+	ctx := context.Background()
+
+	a, err := app.NewApplication(c)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// signal handling
+	run := make(chan struct{})
 	go func() {
-		// service connections
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("listen: %s\n", err.Error())
-			panic(err)
-		}
+		signals := make(chan os.Signal, 1)
+
+		// kill (no param) default send syscall.SIGTERM
+		// kill -2 is syscall.SIGINT but os.Interrupt is the OS agnostic version
+		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+		<-signals
+
+		// What's happening above? This function will wait for a signal like
+		// the one sent from you, the user, hitting CTRL-C. If it receives
+		// a signal, it closes the blocking channel, 'signals', then proceeds
+		// with the code below.
+
+		// we stop our application and cleanup after ourselves
+		a.Stop(&ctx)
+
+		// we close the 'run' channel thus exiting the main function
+		// and therefore the app.
+		close(run)
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server with
-	// a timeout of 5 seconds.
-	quit := make(chan os.Signal)
-	// kill (no param) default send syscall.SIGTERM
-	// kill -2 is syscall.SIGINT
-	// kill -9 is syscall.SIGKILL but can't be caught, so don't need add it
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("Shutdown Server ...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server Shutdown:", err)
-	}
-	// catching ctx.Done(). timeout of 5 seconds.
-	select {
-	case <-ctx.Done():
-		log.Println("timeout of 5 seconds.")
-	}
-	log.Println("Server exiting")
+	a.Start()
+	<-run
 }

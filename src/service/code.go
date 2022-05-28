@@ -27,7 +27,7 @@ type Counter struct {
 }
 
 func NewCounter(ctx context.Context, token string, baseGitURL string) Counter {
-	client := gh.NewClient(token, baseGitURL, ctx)
+	client := gh.NewClient(ctx, token, baseGitURL)
 	return Counter{
 		Token:      token,
 		BaseGitURL: baseGitURL,

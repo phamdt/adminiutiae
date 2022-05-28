@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/phamdt/adminiutiae/pkg/file"
+	"github.com/phamdt/adminiutiae/src/service"
 )
 
 func main() {
@@ -41,7 +42,7 @@ func main() {
 	org = strings.Trim(org, "\n")
 
 	ctx := context.Background()
-	counter := code.NewCounter(ctx, token, baseGitURL)
+	counter := service.NewCounter(ctx, token, baseGitURL)
 	header, rows, err := counter.GetGithubLOC(outputBaseDir, org)
 	if err != nil {
 		log.Fatalf("%+v", err)
