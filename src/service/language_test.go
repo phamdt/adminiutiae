@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/phamdt/adminiutiae/src/set"
+	"github.com/phamdt/adminiutiae/pkg/set"
 )
 
 func TestExtractLanguageCounts(t *testing.T) {

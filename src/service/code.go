@@ -12,12 +12,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/go-github/github"
 	"github.com/pkg/errors"
 
-	"github.com/google/go-github/github"
-	"github.com/phamdt/adminiutiae/src/file"
-	"github.com/phamdt/adminiutiae/src/set"
-	"golang.org/x/oauth2"
+	"github.com/phamdt/adminiutiae/pkg/file"
+	gh "github.com/phamdt/adminiutiae/pkg/github"
+	"github.com/phamdt/adminiutiae/pkg/set"
 )
 
 type Counter struct {
@@ -27,15 +27,7 @@ type Counter struct {
 }
 
 func NewCounter(ctx context.Context, token string, baseGitURL string) Counter {
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	)
-	tc := oauth2.NewClient(ctx, ts)
-	client, err := github.NewEnterpriseClient(fmt.Sprintf("%s/api/v3", baseGitURL), "", tc)
-	if err != nil {
-		panic(errors.WithStack(err))
-	}
-
+	client := gh.NewClient(token, baseGitURL, ctx)
 	return Counter{
 		Token:      token,
 		BaseGitURL: baseGitURL,
@@ -183,6 +175,7 @@ func runCommand(command *exec.Cmd) ([]byte, error) {
 	if err := command.Start(); err != nil {
 		return nil, errors.WithStack(err)
 	}
+
 	_, err = ioutil.ReadAll(stderr)
 	if err != nil {
 		return nil, errors.WithStack(err)

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/phamdt/adminiutiae/src/set"
+	"github.com/phamdt/adminiutiae/pkg/set"
 )
 
 // LanguageSummary is derived from bcc's processor.LanguageSummary
