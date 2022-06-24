@@ -5,7 +5,7 @@ go 1.18
 // replace github.com/phamdt/pasta => ../../../github.com/phamdt/pasta
 
 require (
-	github.com/gin-gonic/gin v1.8.0
+	github.com/gin-gonic/gin v1.8.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/pkg/errors v0.9.1
