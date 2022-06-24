@@ -9,13 +9,20 @@ import (
 func NewRouter(c *Container) (*gin.Engine, error) {
 	// create a router
 	r := gin.Default()
+	r.RedirectTrailingSlash = true
+
+	// r.Use(middleware.HasBasicAuth)
 
 	RegisterRoutes(c, r)
 
 	return r, nil
 }
 
-func RegisterRoutes(c *Container, r *gin.Engine) {
+func RegisterRoutes(co *Container, r *gin.Engine) {
 	// Here you can define the HTTP method, the path, and the handler.
-	r.POST("/code/count", c.CodeCountController.Create)
+	r.POST("/code/count", co.CodeCountController.Create)
+	r.GET("/teams/:teamID/members", co.TeamMemberController.Index)
+	r.GET("/teams/:teamID/worklogs", co.TeamWorklogsController.Index)
+	r.GET("/tickets", co.TicketController.Index)
+	r.GET("/tickets/:projectKey", co.TicketController.Show)
 }
