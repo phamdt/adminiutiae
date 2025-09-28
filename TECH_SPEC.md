@@ -47,26 +47,29 @@ This specification outlines a microservices architecture where:
 - **Message Processing**: Consume jobs from Redis streams, publish results
 - **Data Processing**: Heavy computational tasks, data transformation
 
-## Job Queue Architecture (Without Celery)
+## Celery-Free Job Architecture
 
-### Redis-Based Job Queue
-Instead of Celery, we use Redis directly for job queuing:
+### Direct HTTP Communication
+We eliminate Celery entirely and use direct HTTP communication:
 
 **Python Side:**
-- Uses `redis-py` to push jobs to Redis streams
-- Creates job records in PostgreSQL for tracking
-- Polls job status or uses Redis pub/sub for notifications
+- Receives HTTP requests from clients
+- Creates job records in PostgreSQL
+- Sends HTTP POST to Go service (fire-and-forget)
+- Provides job status endpoints
 
 **Go Side:**
-- Uses `go-redis` to consume from Redis streams
-- Processes jobs concurrently with worker pools
-- Updates job status in PostgreSQL and publishes results
+- Receives job requests via HTTP
+- Processes jobs asynchronously with goroutines
+- Updates job status directly in PostgreSQL
+- Handles all external API interactions
 
 **Benefits:**
-- **Simpler Architecture**: No Celery broker complexity
-- **Better Go Integration**: Native Redis clients in both languages
-- **Lower Resource Usage**: No additional Celery workers needed
-- **Direct Control**: Custom job processing logic without Celery abstractions
+- **Maximum Interoperability**: Simple HTTP between Go and Python
+- **Minimal Dependencies**: No message brokers or complex queues
+- **Easy Testing**: Services can be tested independently
+- **Operational Simplicity**: Only 2 services to manage
+- **Natural Scaling**: Scale Python API and Go workers independently
 
 ## Technology Stack
 
@@ -87,8 +90,9 @@ Instead of Celery, we use Redis directly for job queuing:
 - **Monitoring**: Prometheus metrics, zerolog
 
 ### Infrastructure
-- **Database**: PostgreSQL 15+
-- **Message Broker**: Redis 7+
+- **Database**: PostgreSQL 16+
+- **Cache/PubSub**: Redis 8.2+ (optional for notifications)
+- **Container Platform**: Docker 25.0+
 - **Container Orchestration**: Docker Compose (dev), Kubernetes (prod)
 - **Monitoring**: Prometheus + Grafana
 - **Logging**: Centralized logging with ELK stack
@@ -97,37 +101,39 @@ Instead of Celery, we use Redis directly for job queuing:
 
 ### Python Dependencies (`requirements.txt`)
 ```
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlalchemy==2.0.23
-asyncpg==0.29.0
-alembic==1.12.1
-pydantic==2.5.0
-redis==5.0.1
-httpx==0.25.2
-prometheus-client==0.19.0
-structlog==23.2.0
-python-multipart==0.0.6
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+sqlalchemy==2.0.35
+asyncpg==0.30.0
+alembic==1.13.3
+pydantic==2.9.2
+redis==6.2.0
+httpx==0.27.2
+prometheus-client==0.21.0
+structlog==24.4.0
+python-multipart==0.0.12
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+pytest==8.3.3
+pytest-asyncio==0.24.0
 ```
 
 ### Go Dependencies (`go.mod`)
 ```go
 module github.com/company/go-worker
 
-go 1.21
+go 1.22
 
 require (
-    github.com/gin-gonic/gin v1.9.1
-    github.com/jackc/pgx/v5 v5.5.0
-    github.com/redis/go-redis/v9 v9.3.0
-    github.com/prometheus/client_golang v1.17.0
-    github.com/rs/zerolog v1.31.0
-    github.com/spf13/viper v1.17.0
-    github.com/stretchr/testify v1.8.4
-    golang.org/x/sync v0.5.0
-    golang.org/x/time v0.5.0
+    github.com/gin-gonic/gin v1.10.0
+    github.com/jackc/pgx/v5 v5.7.1
+    github.com/redis/go-redis/v9 v9.7.0
+    github.com/prometheus/client_golang v1.20.4
+    github.com/rs/zerolog v1.33.0
+    github.com/spf13/viper v1.19.0
+    github.com/stretchr/testify v1.9.0
+    golang.org/x/sync v0.8.0
+    golang.org/x/time v0.6.0
 )
 ```
 
@@ -136,7 +142,7 @@ require (
 ### Python Service Dockerfile
 ```dockerfile
 # Multi-stage build for Python service
-FROM python:3.11-slim as python-base
+FROM python:3.13-slim as python-base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -173,7 +179,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ### Go Service Dockerfile
 ```dockerfile
 # Multi-stage build for Go service
-FROM golang:1.21-alpine AS builder
+FROM golang:1.22-alpine AS builder
 
 # Install git and ca-certificates
 RUN apk add --no-cache git ca-certificates
@@ -215,7 +221,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: appdb
       POSTGRES_USER: postgres
@@ -231,7 +237,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.2-alpine
     ports:
       - "6379:6379"
     healthcheck:

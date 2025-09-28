@@ -3,9 +3,9 @@
 ## Quick Start Checklist
 
 Before you begin, ensure you have:
-- [ ] Docker and Docker Compose installed
-- [ ] Go 1.21+ installed
-- [ ] Python 3.11+ installed
+- [ ] Docker 25.0+ and Docker Compose installed
+- [ ] Go 1.22+ installed
+- [ ] Python 3.13+ installed
 - [ ] Git configured
 - [ ] IDE/Editor with Go and Python support
 
@@ -46,21 +46,21 @@ cd python-service
 
 # Create Python files
 cat > requirements.txt << 'EOF'
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlalchemy==2.0.23
-asyncpg==0.29.0
-alembic==1.12.1
-pydantic==2.5.0
-redis==5.0.1
-httpx==0.25.2
-prometheus-client==0.19.0
-structlog==23.2.0
-python-multipart==0.0.6
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+sqlalchemy==2.0.35
+asyncpg==0.30.0
+alembic==1.13.3
+pydantic==2.9.2
+redis==6.2.0
+httpx==0.27.2
+prometheus-client==0.21.0
+structlog==24.4.0
+python-multipart==0.0.12
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-pytest==7.4.3
-pytest-asyncio==0.21.1
+pytest==8.3.3
+pytest-asyncio==0.24.0
 EOF
 
 # Create main application file
@@ -273,7 +273,7 @@ go mod tidy
 cd ../python-service
 cat > Dockerfile << 'EOF'
 # Multi-stage build for Python service
-FROM python:3.11-slim as python-base
+FROM python:3.13-slim as python-base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -338,7 +338,7 @@ EOF
 cd ../go-service
 cat > Dockerfile << 'EOF'
 # Multi-stage build for Go service
-FROM golang:1.21-alpine AS builder
+FROM golang:1.22-alpine AS builder
 
 # Install git and ca-certificates
 RUN apk add --no-cache git ca-certificates
@@ -404,7 +404,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: hybrid_postgres
     environment:
       POSTGRES_DB: appdb
@@ -424,7 +424,7 @@ services:
       - hybrid_network
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.2-alpine
     container_name: hybrid_redis
     ports:
       - "6379:6379"
@@ -992,8 +992,8 @@ EOF
 ```bash
 cd ../go-service
 
-# Add Redis dependencies
-go get github.com/redis/go-redis/v9
+# Add Redis dependencies (latest version)
+go get github.com/redis/go-redis/v9@v9.7.0
 
 # Create Redis client
 cat > pkg/redis/client.go << 'EOF'
@@ -2070,7 +2070,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -2088,7 +2088,7 @@ services:
           memory: 512M
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.2-alpine
     command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
