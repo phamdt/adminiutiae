@@ -37,22 +37,43 @@ This specification outlines a microservices architecture where:
 ### Python REST API Service
 - **Primary Role**: HTTP API endpoints, request validation, simple CRUD operations
 - **Database Operations**: Direct database queries for simple operations (single table queries, basic joins)
-- **Job Delegation**: Queue complex data fetching tasks to Go services
+- **Job Delegation**: Queue complex data fetching tasks to Go services via Redis
 - **Response Handling**: Aggregate results from database and Go services
 
 ### Go Worker Service
 - **Primary Role**: External API interactions, concurrent processing, background jobs
 - **External APIs**: All third-party API calls (REST, GraphQL, gRPC)
 - **Concurrency**: Parallel processing, goroutines, worker pools
-- **Message Processing**: Consume jobs from message queue, publish results
+- **Message Processing**: Consume jobs from Redis streams, publish results
 - **Data Processing**: Heavy computational tasks, data transformation
+
+## Job Queue Architecture (Without Celery)
+
+### Redis-Based Job Queue
+Instead of Celery, we use Redis directly for job queuing:
+
+**Python Side:**
+- Uses `redis-py` to push jobs to Redis streams
+- Creates job records in PostgreSQL for tracking
+- Polls job status or uses Redis pub/sub for notifications
+
+**Go Side:**
+- Uses `go-redis` to consume from Redis streams
+- Processes jobs concurrently with worker pools
+- Updates job status in PostgreSQL and publishes results
+
+**Benefits:**
+- **Simpler Architecture**: No Celery broker complexity
+- **Better Go Integration**: Native Redis clients in both languages
+- **Lower Resource Usage**: No additional Celery workers needed
+- **Direct Control**: Custom job processing logic without Celery abstractions
 
 ## Technology Stack
 
 ### Python Service Stack
 - **Framework**: FastAPI (async/await support)
 - **Database ORM**: SQLAlchemy with asyncpg driver
-- **Message Queue Client**: Celery with Redis broker
+- **Message Queue Client**: Direct Redis client (redis-py)
 - **Validation**: Pydantic models
 - **HTTP Client**: httpx (for internal service calls)
 - **Monitoring**: Prometheus client, structlog
@@ -60,7 +81,7 @@ This specification outlines a microservices architecture where:
 ### Go Service Stack
 - **Framework**: Gin (HTTP server for health checks)
 - **Database Driver**: pgx (PostgreSQL driver)
-- **Message Queue**: go-redis for Redis, machinery for job processing
+- **Message Queue**: go-redis for Redis streams/pub-sub
 - **HTTP Client**: net/http with custom retry logic
 - **Concurrency**: Worker pools, context cancellation
 - **Monitoring**: Prometheus metrics, zerolog
@@ -82,7 +103,6 @@ sqlalchemy==2.0.23
 asyncpg==0.29.0
 alembic==1.12.1
 pydantic==2.5.0
-celery[redis]==5.3.4
 redis==5.0.1
 httpx==0.25.2
 prometheus-client==0.19.0
@@ -101,8 +121,7 @@ go 1.21
 require (
     github.com/gin-gonic/gin v1.9.1
     github.com/jackc/pgx/v5 v5.5.0
-    github.com/go-redis/redis/v8 v8.11.5
-    github.com/RichardKnill/machinery v1.12.1
+    github.com/redis/go-redis/v9 v9.3.0
     github.com/prometheus/client_golang v1.17.0
     github.com/rs/zerolog v1.31.0
     github.com/spf13/viper v1.17.0
@@ -352,32 +371,79 @@ touch pkg/logger/logger.go
 async def fetch_external_data(
     user_id: int,
     request: ExternalDataRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis_client = Depends(get_redis)
 ):
     # Simple database check
     user = await get_user(db, user_id)
     if not user:
         raise HTTPException(404, "User not found")
     
-    # Queue complex job to Go service
-    job_id = await queue_external_data_job(user_id, request.params)
+    # Create job record in database
+    job = Job(
+        user_id=user_id,
+        job_type="external_data",
+        status="queued",
+        parameters=json.dumps(request.dict())
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
     
-    return {"job_id": job_id, "status": "queued"}
+    # Queue job to Redis stream
+    job_data = {
+        "job_id": job.id,
+        "user_id": user_id,
+        "job_type": "external_data",
+        "parameters": request.dict()
+    }
+    
+    await redis_client.xadd("job_queue", job_data)
+    
+    return {"job_id": job.id, "status": "queued"}
 ```
 
 #### Step 3.2: Go Background Workers
 ```go
-// Example job processor
-func (w *Worker) ProcessExternalDataJob(ctx context.Context, job *Job) error {
+// Example Redis stream consumer
+func (w *Worker) StartJobConsumer(ctx context.Context) error {
+    for {
+        // Read from Redis stream
+        streams, err := w.redisClient.XRead(ctx, &redis.XReadArgs{
+            Streams: []string{"job_queue", "$"},
+            Block:   time.Second,
+        }).Result()
+        
+        if err != nil {
+            continue
+        }
+        
+        for _, stream := range streams {
+            for _, message := range stream.Messages {
+                // Process job in goroutine
+                go w.processJob(ctx, message)
+            }
+        }
+    }
+}
+
+func (w *Worker) processJob(ctx context.Context, msg redis.XMessage) {
+    jobData := msg.Values
+    
+    // Update job status to processing
+    jobID := jobData["job_id"].(string)
+    w.updateJobStatus(ctx, jobID, "processing")
+    
     // Concurrent external API calls
     var wg sync.WaitGroup
-    results := make(chan APIResult, len(job.APIs))
+    results := make(chan APIResult, 3)
     
-    for _, api := range job.APIs {
+    apis := []string{"api1", "api2", "api3"}
+    for _, api := range apis {
         wg.Add(1)
-        go func(apiConfig APIConfig) {
+        go func(apiURL string) {
             defer wg.Done()
-            result := w.callExternalAPI(ctx, apiConfig)
+            result := w.callExternalAPI(ctx, apiURL)
             results <- result
         }(api)
     }
@@ -388,8 +454,11 @@ func (w *Worker) ProcessExternalDataJob(ctx context.Context, job *Job) error {
         close(results)
     }()
     
-    // Process and store results
-    return w.aggregateAndStore(ctx, job.UserID, results)
+    // Aggregate and store results
+    w.aggregateAndStore(ctx, jobID, results)
+    
+    // Acknowledge message
+    w.redisClient.XAck(ctx, "job_queue", "workers", msg.ID)
 }
 ```
 

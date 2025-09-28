@@ -52,7 +52,6 @@ sqlalchemy==2.0.23
 asyncpg==0.29.0
 alembic==1.12.1
 pydantic==2.5.0
-celery[redis]==5.3.4
 redis==5.0.1
 httpx==0.25.2
 prometheus-client==0.19.0
@@ -838,117 +837,152 @@ EOF
 
 #### Morning (4 hours): Redis and Job Queue Setup
 
-**Step 4.1: Python Celery Setup**
+**Step 4.1: Python Redis Job Queue Setup**
 ```bash
 cd ../python-service
 
-# Create Celery configuration
-cat > app/core/celery_app.py << 'EOF'
-from celery import Celery
+# Create Redis job queue service
+cat > app/services/redis_queue.py << 'EOF'
+import json
+import redis.asyncio as redis
+from typing import Dict, Any
 from app.core.config import settings
 
-celery_app = Celery(
-    "worker",
-    broker=settings.redis_url,
-    backend=settings.redis_url,
-    include=["app.services.job_service"]
-)
+class RedisJobQueue:
+    def __init__(self):
+        self.redis_client = None
+    
+    async def connect(self):
+        """Initialize Redis connection"""
+        self.redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+        
+    async def disconnect(self):
+        """Close Redis connection"""
+        if self.redis_client:
+            await self.redis_client.close()
+    
+    async def queue_job(self, job_type: str, job_data: Dict[str, Any]) -> str:
+        """Queue a job to Redis stream"""
+        stream_name = f"jobs:{job_type}"
+        
+        # Add job to Redis stream
+        job_id = await self.redis_client.xadd(
+            stream_name,
+            job_data,
+            maxlen=10000  # Keep last 10k jobs
+        )
+        
+        return job_id
+    
+    async def get_job_status(self, job_id: int) -> Dict[str, Any]:
+        """Get job status from Redis or database"""
+        # For now, we'll get status from database
+        # In production, you might cache status in Redis
+        return {"status": "pending", "job_id": job_id}
+    
+    async def publish_job_update(self, job_id: int, status: str, result: Dict[str, Any] = None):
+        """Publish job status update"""
+        update_data = {
+            "job_id": job_id,
+            "status": status,
+            "timestamp": str(int(time.time()))
+        }
+        
+        if result:
+            update_data["result"] = json.dumps(result)
+            
+        await self.redis_client.publish(f"job_updates:{job_id}", json.dumps(update_data))
 
-# Celery configuration
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="UTC",
-    enable_utc=True,
-    task_routes={
-        "app.services.job_service.process_external_data": {"queue": "external_data"},
-        "app.services.job_service.process_heavy_computation": {"queue": "computation"},
-    },
-)
+# Global job queue instance
+job_queue = RedisJobQueue()
+
+async def get_job_queue() -> RedisJobQueue:
+    """Dependency to get job queue instance"""
+    if job_queue.redis_client is None:
+        await job_queue.connect()
+    return job_queue
 EOF
 
 # Create job service
 cat > app/services/job_service.py << 'EOF'
 import json
-import httpx
-from celery import current_task
-from app.core.celery_app import celery_app
-from app.core.config import settings
+from typing import Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.job import Job
+from app.services.redis_queue import RedisJobQueue
 
-@celery_app.task(bind=True)
-def process_external_data(self, job_id: int, user_id: int, parameters: dict):
-    """Queue a job for Go worker to process external data"""
-    try:
-        # Update job status to processing
-        self.update_state(
-            state="PROGRESS",
-            meta={"current": 0, "total": 100, "status": "Starting external data processing"}
+class JobService:
+    def __init__(self, db: AsyncSession, job_queue: RedisJobQueue):
+        self.db = db
+        self.job_queue = job_queue
+    
+    async def create_external_data_job(self, user_id: int, parameters: Dict[str, Any]) -> int:
+        """Create and queue an external data job"""
+        # Create job record in database
+        job = Job(
+            user_id=user_id,
+            job_type="external_data",
+            status="queued",
+            parameters=json.dumps(parameters)
         )
         
-        # Send job to Go worker via HTTP
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{settings.go_service_url}/jobs/external-data",
-                json={
-                    "job_id": job_id,
-                    "user_id": user_id,
-                    "parameters": parameters
-                },
-                timeout=30.0
-            )
-            
-        if response.status_code == 200:
-            result = response.json()
-            return {
-                "status": "completed",
-                "result": result,
-                "job_id": job_id
-            }
-        else:
-            raise Exception(f"Go worker returned status {response.status_code}")
-            
-    except Exception as exc:
-        self.update_state(
-            state="FAILURE",
-            meta={"error": str(exc), "job_id": job_id}
-        )
-        raise
-
-@celery_app.task(bind=True)
-def process_heavy_computation(self, job_id: int, data: dict):
-    """Process heavy computation locally in Python"""
-    try:
-        # Simulate heavy computation
-        import time
-        total_steps = 100
+        self.db.add(job)
+        await self.db.commit()
+        await self.db.refresh(job)
         
-        for i in range(total_steps):
-            time.sleep(0.1)  # Simulate work
-            
-            # Update progress
-            self.update_state(
-                state="PROGRESS",
-                meta={
-                    "current": i,
-                    "total": total_steps,
-                    "status": f"Processing step {i}/{total_steps}"
-                }
-            )
-        
-        # Return result
-        return {
-            "status": "completed",
-            "result": {"processed_items": total_steps, "data": data},
-            "job_id": job_id
+        # Queue job to Redis
+        job_data = {
+            "job_id": str(job.id),
+            "user_id": str(user_id),
+            "job_type": "external_data",
+            "parameters": json.dumps(parameters)
         }
         
-    except Exception as exc:
-        self.update_state(
-            state="FAILURE",
-            meta={"error": str(exc), "job_id": job_id}
+        await self.job_queue.queue_job("external_data", job_data)
+        
+        return job.id
+    
+    async def get_job_status(self, job_id: int) -> Dict[str, Any]:
+        """Get job status from database"""
+        from sqlalchemy import select
+        
+        result = await self.db.execute(
+            select(Job).where(Job.id == job_id)
         )
-        raise
+        job = result.scalar_one_or_none()
+        
+        if not job:
+            return None
+            
+        return {
+            "id": job.id,
+            "status": job.status,
+            "result": json.loads(job.result) if job.result else None,
+            "error_message": job.error_message,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at
+        }
+    
+    async def update_job_status(self, job_id: int, status: str, result: Dict[str, Any] = None, error_message: str = None):
+        """Update job status in database"""
+        from sqlalchemy import select
+        
+        result_db = await self.db.execute(
+            select(Job).where(Job.id == job_id)
+        )
+        job = result_db.scalar_one_or_none()
+        
+        if job:
+            job.status = status
+            if result:
+                job.result = json.dumps(result)
+            if error_message:
+                job.error_message = error_message
+                
+            await self.db.commit()
+            
+            # Publish update to Redis
+            await self.job_queue.publish_job_update(job_id, status, result)
 EOF
 ```
 
@@ -959,8 +993,7 @@ EOF
 cd ../go-service
 
 # Add Redis dependencies
-go get github.com/go-redis/redis/v8
-go get github.com/RichardKnill/machinery/v1
+go get github.com/redis/go-redis/v9
 
 # Create Redis client
 cat > pkg/redis/client.go << 'EOF'
@@ -969,8 +1002,9 @@ package redis
 import (
     "context"
     "fmt"
+    "time"
 
-    "github.com/go-redis/redis/v8"
+    "github.com/redis/go-redis/v9"
 )
 
 type Client struct {
@@ -1002,12 +1036,27 @@ func (c *Client) Ping(ctx context.Context) error {
     return c.rdb.Ping(ctx).Err()
 }
 
-func (c *Client) Get(ctx context.Context, key string) (string, error) {
-    return c.rdb.Get(ctx, key).Result()
+// Job queue methods
+func (c *Client) ReadStream(ctx context.Context, stream string, consumer string, group string) ([]redis.XStream, error) {
+    return c.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+        Group:    group,
+        Consumer: consumer,
+        Streams:  []string{stream, ">"},
+        Count:    10,
+        Block:    time.Second,
+    }).Result()
 }
 
-func (c *Client) Set(ctx context.Context, key string, value interface{}) error {
-    return c.rdb.Set(ctx, key, value, 0).Err()
+func (c *Client) AckMessage(ctx context.Context, stream string, group string, messageID string) error {
+    return c.rdb.XAck(ctx, stream, group, messageID).Err()
+}
+
+func (c *Client) CreateConsumerGroup(ctx context.Context, stream string, group string) error {
+    return c.rdb.XGroupCreate(ctx, stream, group, "$").Err()
+}
+
+func (c *Client) PublishUpdate(ctx context.Context, channel string, message string) error {
+    return c.rdb.Publish(ctx, channel, message).Err()
 }
 EOF
 
