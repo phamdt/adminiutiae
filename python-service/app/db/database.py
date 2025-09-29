@@ -3,8 +3,17 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
 # Create async engine with optimized settings
+def get_database_url() -> str:
+    """Get properly formatted database URL for asyncpg."""
+    url = settings.database_url
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
 engine = create_async_engine(
-    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+    get_database_url(),
     echo=settings.environment == "development",
     future=True,
     pool_size=20,

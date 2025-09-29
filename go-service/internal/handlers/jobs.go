@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/company/go-worker/internal/models"
 	"github.com/company/go-worker/internal/workers"
 	"github.com/company/go-worker/pkg/database"
 	"github.com/company/go-worker/pkg/logger"
+	"github.com/gin-gonic/gin"
 )
 
 type JobHandler struct {

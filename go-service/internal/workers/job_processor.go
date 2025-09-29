@@ -70,11 +70,11 @@ func (jp *JobProcessor) ProcessExternalDataJob(ctx context.Context, jobID int, u
 	resultData := map[string]interface{}{
 		"api_results": results,
 		"metadata": map[string]interface{}{
-			"processed_at":    time.Now(),
-			"total_sources":   len(results),
+			"processed_at":     time.Now(),
+			"total_sources":    len(results),
 			"successful_calls": countSuccessfulResults(results),
-			"job_id":         jobID,
-			"user_id":        userID,
+			"job_id":           jobID,
+			"user_id":          userID,
 		},
 	}
 

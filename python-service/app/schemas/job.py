@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -19,8 +19,7 @@ class JobResponse(JobBase):
     updated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ExternalDataRequest(BaseModel):
     data_sources: List[str] = Field(..., min_items=1, description="List of external API URLs or identifiers")

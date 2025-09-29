@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/company/go-worker/internal/config"
 	"github.com/company/go-worker/internal/handlers"
 	"github.com/company/go-worker/internal/services"
@@ -16,6 +15,7 @@ import (
 	"github.com/company/go-worker/pkg/database"
 	"github.com/company/go-worker/pkg/logger"
 	"github.com/company/go-worker/pkg/redis"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -80,12 +80,12 @@ func main() {
 			c.Header("Access-Control-Allow-Origin", "*")
 			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			
+
 			if c.Request.Method == "OPTIONS" {
 				c.AbortWithStatus(http.StatusOK)
 				return
 			}
-			
+
 			c.Next()
 		})
 	}

@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/company/go-worker/pkg/database"
 	"github.com/company/go-worker/pkg/redis"
+	"github.com/gin-gonic/gin"
 )
 
 type HealthHandler struct {
@@ -55,9 +55,9 @@ func (h *HealthHandler) Check(c *gin.Context) {
 	// Add database statistics
 	if stats := h.db.Stats(); stats != nil {
 		response["database_stats"] = gin.H{
-			"total_conns":     stats.TotalConns(),
-			"acquired_conns":  stats.AcquiredConns(),
-			"idle_conns":      stats.IdleConns(),
+			"total_conns":       stats.TotalConns(),
+			"acquired_conns":    stats.AcquiredConns(),
+			"idle_conns":        stats.IdleConns(),
 			"constructed_conns": stats.ConstructingConns(),
 		}
 	}

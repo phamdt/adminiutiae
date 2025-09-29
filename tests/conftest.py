@@ -5,6 +5,8 @@ This file contains test setup, database fixtures, and authentication helpers.
 import pytest
 import asyncio
 import os
+import time
+import json
 from typing import Tuple, AsyncGenerator
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -14,8 +16,10 @@ import redis.asyncio as redis
 # Import your app components
 from app.main import app
 from app.db.database import get_db
-from app.models.user import Base as UserBase
-from app.models.job import Base as JobBase
+from app.models.base import Base
+# Import models to ensure they're registered with SQLAlchemy
+from app.models.user import User
+from app.models.job import Job
 
 
 # Test configuration
@@ -52,15 +56,13 @@ async def engine():
     
     # Create all tables
     async with engine.begin() as conn:
-        await conn.run_sync(UserBase.metadata.create_all)
-        await conn.run_sync(JobBase.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
     
     yield engine
     
     # Cleanup
     async with engine.begin() as conn:
-        await conn.run_sync(UserBase.metadata.drop_all)
-        await conn.run_sync(JobBase.metadata.drop_all)
+        await conn.run_sync(Base.metadata.drop_all)
     
     await engine.dispose()
 

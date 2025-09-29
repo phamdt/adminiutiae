@@ -1,0 +1,305 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+          POSTGRES_USER: testuser
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:8.2-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('python-service/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install Python dependencies
+      working-directory: python-service
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Check Python syntax
+      working-directory: python-service
+      run: |
+        python -m py_compile app/main.py
+        find app -name "*.py" -exec python -m py_compile {} \;
+        
+    - name: Run Python linting
+      working-directory: python-service
+      run: |
+        pip install flake8 black isort
+        flake8 app --max-line-length=120 --ignore=E203,W503
+        black --check app --line-length=120
+        isort --check-only app
+        
+    - name: Set up test environment
+      run: |
+        export TEST_DATABASE_URL="postgresql+asyncpg://testuser:testpass@localhost:5433/testdb"
+        export TEST_REDIS_URL="redis://localhost:6380/0"
+        export TESTING="true"
+        
+    - name: Run Python tests
+      working-directory: python-service
+      env:
+        TEST_DATABASE_URL: "postgresql+asyncpg://testuser:testpass@localhost:5433/testdb"
+        TEST_REDIS_URL: "redis://localhost:6380/0"
+        TESTING: "true"
+      run: |
+        pytest tests/ -v --cov=app --cov-report=xml
+        
+    - name: Upload Python coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: python-service/coverage.xml
+        flags: python
+
+  go-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+          POSTGRES_USER: testuser
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go 1.22
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+        
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('go-service/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Install Go dependencies
+      working-directory: go-service
+      run: |
+        go mod download
+        go mod verify
+        
+    - name: Check Go formatting
+      working-directory: go-service
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "Code is not formatted:"
+          gofmt -s -l .
+          exit 1
+        fi
+        
+    - name: Run Go linting
+      working-directory: go-service
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        golangci-lint run ./...
+        
+    - name: Build Go application
+      working-directory: go-service
+      run: |
+        go build -v ./...
+        go build -o worker ./cmd/worker
+        
+    - name: Run Go tests
+      working-directory: go-service
+      env:
+        DATABASE_URL: "postgresql://testuser:testpass@localhost:5433/testdb"
+        REDIS_URL: "redis://localhost:6380/0"
+      run: |
+        go test -v -race -coverprofile=coverage.out ./...
+        go tool cover -func=coverage.out
+        
+    - name: Upload Go coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: go-service/coverage.out
+        flags: go
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: [python-tests, go-tests]
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+          POSTGRES_USER: testuser
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:8.2-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+        
+    - name: Set up Go 1.22
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+    
+    - name: Install dependencies
+      run: |
+        cd python-service && pip install -r requirements.txt
+        cd ../go-service && go mod download
+        
+    - name: Build Go service
+      working-directory: go-service
+      run: go build -o worker ./cmd/worker
+      
+    - name: Start services
+      env:
+        DATABASE_URL: "postgresql://testuser:testpass@localhost:5433/testdb"
+        REDIS_URL: "redis://localhost:6380/0"
+        TEST_DATABASE_URL: "postgresql+asyncpg://testuser:testpass@localhost:5433/testdb"
+        TEST_REDIS_URL: "redis://localhost:6380/0"
+      run: |
+        # Start Go service in background
+        cd go-service
+        ./worker &
+        GO_PID=$!
+        cd ..
+        
+        # Start Python service in background  
+        cd python-service
+        python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        PYTHON_PID=$!
+        cd ..
+        
+        # Wait for services to start
+        sleep 10
+        
+        # Run integration tests
+        pytest tests/integration/ -v
+        
+        # Cleanup
+        kill $GO_PID $PYTHON_PID || true
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build Python service image
+      run: |
+        cd python-service
+        docker build --target development -t python-api:dev .
+        docker build --target production -t python-api:prod .
+        
+    - name: Build Go service image
+      run: |
+        cd go-service
+        docker build --target production -t go-worker:prod .
+        
+    - name: Test Docker Compose
+      run: |
+        cp .env.example .env
+        cd docker-compose
+        docker-compose config  # Validate compose file
+        docker-compose up --build -d
+        
+        # Wait for services
+        sleep 30
+        
+        # Test health endpoints
+        curl -f http://localhost:8000/health
+        curl -f http://localhost:8080/health
+        
+        # Cleanup
+        docker-compose down
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
