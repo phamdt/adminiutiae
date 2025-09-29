@@ -1314,7 +1314,7 @@ from typing import List
 from app.db.database import get_db
 from app.schemas.user import UserCreate, UserResponse, UserLogin
 from app.schemas.job import JobCreate, JobResponse, ExternalDataRequest
-from app.services.job_service import process_external_data
+from app.services.job_service import JobService
 from app.models.user import User
 from app.models.job import Job
 
@@ -1359,45 +1359,34 @@ async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
     return user
 
 @router.post("/users/{user_id}/external-data")
-async def queue_external_data_job(
+async def create_external_data_job(
     user_id: int,
     request: ExternalDataRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Queue external data fetching job"""
-    # Verify user exists
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalar_one_or_none()
+    """Create external data fetching job"""
+    # Use JobService for job creation and Go service communication
+    job_service = JobService(db)
     
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        job_id = await job_service.create_external_data_job(
+            user_id=user_id,
+            parameters=request.dict()
+        )
+        
+        return {
+            "job_id": job_id,
+            "status": "queued",
+            "message": "External data fetching job has been queued"
+        }
     
-    # Create job record
-    job = Job(
-        user_id=user_id,
-        job_type="external_data",
-        status="pending",
-        parameters=json.dumps(request.dict())
-    )
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
-    
-    # Queue Celery task
-    task = process_external_data.delay(
-        job_id=job.id,
-        user_id=user_id,
-        parameters=request.dict()
-    )
-    
-    return {
-        "job_id": job.id,
-        "task_id": task.id,
-        "status": "queued",
-        "message": "External data fetching job has been queued"
-    }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create job"
+        )
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_job_status(job_id: int, db: AsyncSession = Depends(get_db)):

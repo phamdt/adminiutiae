@@ -37,14 +37,14 @@ This specification outlines a microservices architecture where:
 ### Python REST API Service
 - **Primary Role**: HTTP API endpoints, request validation, simple CRUD operations
 - **Database Operations**: Direct database queries for simple operations (single table queries, basic joins)
-- **Job Delegation**: Queue complex data fetching tasks to Go services via Redis
+- **Job Delegation**: Delegate complex data fetching tasks to Go services via HTTP
 - **Response Handling**: Aggregate results from database and Go services
 
 ### Go Worker Service
 - **Primary Role**: External API interactions, concurrent processing, background jobs
 - **External APIs**: All third-party API calls (REST, GraphQL, gRPC)
 - **Concurrency**: Parallel processing, goroutines, worker pools
-- **Message Processing**: Consume jobs from Redis streams, publish results
+- **Job Processing**: Receive HTTP job requests, process asynchronously
 - **Data Processing**: Heavy computational tasks, data transformation
 
 ## Celery-Free Job Architecture
@@ -76,17 +76,17 @@ We eliminate Celery entirely and use direct HTTP communication:
 ### Python Service Stack
 - **Framework**: FastAPI (async/await support)
 - **Database ORM**: SQLAlchemy with asyncpg driver
-- **Message Queue Client**: Direct Redis client (redis-py)
+- **Cache/PubSub Client**: Redis client (redis-py, optional)
 - **Validation**: Pydantic models
-- **HTTP Client**: httpx (for internal service calls)
+- **HTTP Client**: httpx (for Go service communication)
 - **Monitoring**: Prometheus client, structlog
 
 ### Go Service Stack
-- **Framework**: Gin (HTTP server for health checks)
+- **Framework**: Gin (HTTP server for job processing)
 - **Database Driver**: pgx (PostgreSQL driver)
-- **Message Queue**: go-redis for Redis streams/pub-sub
+- **Cache/PubSub**: go-redis for Redis (optional notifications)
 - **HTTP Client**: net/http with custom retry logic
-- **Concurrency**: Worker pools, context cancellation
+- **Concurrency**: Goroutines, worker pools, context cancellation
 - **Monitoring**: Prometheus metrics, zerolog
 
 ### Infrastructure
@@ -356,15 +356,15 @@ touch pkg/logger/logger.go
 3. **Configure connection pooling** for both Python and Go services
 4. **Create initial migration** for user and job tables
 
-#### Step 2.2: Message Queue Integration
-1. **Configure Redis connection** in both services
-2. **Set up Celery** in Python for job queuing
-3. **Implement Machinery** in Go for job processing
-4. **Create job serialization schemas**
+#### Step 2.2: HTTP Job Communication Setup
+1. **Configure HTTP client** in Python service
+2. **Set up job delegation** via HTTP POST to Go service
+3. **Implement job processing handlers** in Go service
+4. **Create job request/response schemas**
 
 #### Step 2.3: Basic Service Communication
 1. **Implement health check endpoints** in both services
-2. **Create job queuing mechanism** in Python
+2. **Create HTTP job delegation** in Python
 3. **Implement job processing** in Go
 4. **Add error handling and retries**
 
