@@ -1,6 +1,6 @@
 module github.com/phamdt/adminiutiae
 
-go 1.20
+go 1.24.0
 
 // replace github.com/phamdt/pasta => ../../../github.com/phamdt/pasta
 
@@ -11,7 +11,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/steinfletcher/apitest v1.5.14
-	golang.org/x/oauth2 v0.6.0
+	golang.org/x/oauth2 v0.33.0
 	gopkg.in/andygrunwald/go-jira.v1 v1.8.0
 	gopkg.in/guregu/null.v2 v2.1.2
 	gopkg.in/mail.v2 v2.3.1
@@ -35,7 +35,6 @@ require (
 	github.com/go-playground/validator/v10 v10.11.2 // indirect
 	github.com/goccy/go-json v0.10.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
@@ -61,7 +60,6 @@ require (
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
