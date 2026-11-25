@@ -20,6 +20,9 @@ type Config struct {
 		Username string
 		Password string
 	}
+	Tempo struct {
+		BaseURL string
+	}
 }
 
 // NewConfig is a constructor that loads environment variables from the
@@ -42,6 +45,9 @@ func NewConfig() (*Config, error) {
 			BaseURL  string
 			Username string
 			Password string
+		}{},
+		Tempo: struct {
+			BaseURL string
 		}{},
 	}, nil
 }
