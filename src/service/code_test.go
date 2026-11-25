@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +35,9 @@ func TestCounter_GetGithubLOC(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if strings.Contains(tt.fields.Token, "add your token") {
+				t.Skip("requires a real GitHub token")
+			}
 			c := NewCounter(context.Background(), tt.fields.Token, tt.fields.BaseGitURL)
 			headers, rows, err := c.GetGithubLOC(tt.args.outputBaseDir, tt.args.org)
 			if (err != nil) != tt.wantErr {

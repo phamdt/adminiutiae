@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/phamdt/adminiutiae/src/controllers/middleware"
 	"github.com/phamdt/adminiutiae/src/service"
 	"github.com/steinfletcher/apitest"
 )
@@ -36,7 +37,7 @@ func TestCodeCountController_Create(t *testing.T) {
 			router := gin.Default()
 			counter := MockCounter{}
 			codeCountCtrl := CodeCountController{counter: &counter}
-			router.POST("/github/:org/code/counts", codeCountCtrl.Create)
+			router.POST("/github/:org/code/counts", middleware.HasBasicAuth, codeCountCtrl.Create)
 
 			apitest.New().
 				Handler(router).
