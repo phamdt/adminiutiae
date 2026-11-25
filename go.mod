@@ -1,6 +1,6 @@
 module github.com/phamdt/adminiutiae
 
-go 1.26.1
+go 1.26.11
 
 // replace github.com/phamdt/pasta => ../../../github.com/phamdt/pasta
 
@@ -51,7 +51,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.57.0 // indirect
+	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/trivago/tgo v1.0.7 // indirect
